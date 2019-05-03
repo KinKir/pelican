@@ -54,23 +54,23 @@ From your site directory, run the ``pelican`` command to generate your site::
 
     pelican content
 
-Your site has now been generated inside the ``output`` directory. (You may see a
-warning related to feeds, but that is normal when developing locally and can be
-ignored for now.)
+Your site has now been generated inside the ``output`` directory. (You may see
+a warning related to feeds, but that is normal when developing locally and can
+be ignored for now.)
 
 Preview your site
 -----------------
 
-Open a new terminal session and run the following commands to switch to your
-``output`` directory and launch Pelican's web server::
+Open a new terminal session, navigate to your site directory and run the
+following command to launch Pelican's web server::
 
-    cd ~/projects/yoursite/output
-    python -m pelican.server
+    pelican --listen
 
 Preview your site by navigating to http://localhost:8000/ in your browser.
 
-Continue reading the other documentation sections for more detail, and check out
-the Pelican wiki's Tutorials_ page for links to community-published tutorials.
+Continue reading the other documentation sections for more detail, and check
+out the Pelican wiki's Tutorials_ page for links to community-published
+tutorials.
 
 .. _Tutorials: https://github.com/getpelican/pelican/wiki/Tutorials
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env python
+import sys
 from io import open
 from os import walk
 from os.path import join, relpath
-import sys
 
 from setuptools import setup
 
@@ -28,13 +28,14 @@ if sys.version_info.major < 3:
 
 setup(
     name='pelican',
-    version='3.7.2.dev0',
-    url='http://getpelican.com/',
+    version='4.0.2.dev0',
+    url='https://getpelican.com/',
     author='Alexis Metaireau',
     maintainer='Justin Mayer',
     author_email='authors@getpelican.com',
     description="Static site generator supporting reStructuredText and "
                 "Markdown source content.",
+    license='AGPLv3',
     long_description=description,
     packages=['pelican', 'pelican.tools'],
     package_data={
@@ -61,9 +62,9 @@ setup(
         'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: Implementation :: CPython',
         'Topic :: Internet :: WWW/HTTP',
         'Topic :: Software Development :: Libraries :: Python Modules',

@@ -9,9 +9,11 @@ from collections import OrderedDict
 import docutils
 import docutils.core
 import docutils.io
+from docutils.parsers.rst.languages import get_language as get_docutils_lang
 from docutils.writers.html4css1 import HTMLTranslator, Writer
 
 import six
+from six import StringIO
 from six.moves.html_parser import HTMLParser
 
 from pelican import rstdirectives  # NOQA
@@ -31,6 +33,20 @@ except ImportError:
 # This means that _filter_discardable_metadata() must be called on processed
 # metadata dicts before use, to remove the items with the special value.
 _DISCARD = object()
+
+DUPLICATES_DEFINITIONS_ALLOWED = {
+    'tags': False,
+    'date': False,
+    'modified': False,
+    'status': False,
+    'category': False,
+    'author': False,
+    'save_as': False,
+    'url': False,
+    'authors': False,
+    'slug': False
+}
+
 METADATA_PROCESSORS = {
     'tags': lambda x, y: ([
         Tag(tag, y)
@@ -203,11 +219,26 @@ class RstReader(BaseReader):
     def __init__(self, *args, **kwargs):
         super(RstReader, self).__init__(*args, **kwargs)
 
-    def _parse_metadata(self, document):
+        lang_code = self.settings.get('DEFAULT_LANG', 'en')
+        if get_docutils_lang(lang_code):
+            self._language_code = lang_code
+        else:
+            logger.warning("Docutils has no localization for '%s'."
+                           " Using 'en' instead.", lang_code)
+            self._language_code = 'en'
+
+    def _parse_metadata(self, document, source_path):
         """Return the dict containing document metadata"""
         formatted_fields = self.settings['FORMATTED_FIELDS']
 
         output = {}
+
+        if document.first_child_matching_class(docutils.nodes.title) is None:
+            logger.warning(
+                'Document title missing in file %s: '
+                'Ensure exactly one top level section',
+                source_path)
+
         for docinfo in document.traverse(docutils.nodes.docinfo):
             for element in docinfo.children:
                 if element.tagname == 'field':  # custom fields (e.g. summary)
@@ -234,7 +265,10 @@ class RstReader(BaseReader):
         extra_params = {'initial_header_level': '2',
                         'syntax_highlight': 'short',
                         'input_encoding': 'utf-8',
-                        'exit_status_level': 2,
+                        'language_code': self._language_code,
+                        'halt_level': 2,
+                        'traceback': True,
+                        'warning_stream': StringIO(),
                         'embed_stylesheet': False}
         user_params = self.settings.get('DOCUTILS_SETTINGS')
         if user_params:
@@ -247,7 +281,7 @@ class RstReader(BaseReader):
         pub.set_components('standalone', 'restructuredtext', 'html')
         pub.process_programmatic_settings(None, extra_params, None)
         pub.set_source(source_path=source_path)
-        pub.publish(enable_exit_status=True)
+        pub.publish()
         return pub
 
     def read(self, source_path):
@@ -256,7 +290,7 @@ class RstReader(BaseReader):
         parts = pub.writer.parts
         content = parts.get('body')
 
-        metadata = self._parse_metadata(pub.document)
+        metadata = self._parse_metadata(pub.document, source_path)
         metadata.setdefault('title', parts.get('title'))
 
         return content, metadata
@@ -294,7 +328,7 @@ class MarkdownReader(BaseReader):
                 self._md.reset()
                 formatted = self._md.convert(formatted_values)
                 output[name] = self.process_metadata(name, formatted)
-            elif name in METADATA_PROCESSORS:
+            elif not DUPLICATES_DEFINITIONS_ALLOWED.get(name, True):
                 if len(value) > 1:
                     logger.warning(
                         'Duplicate definition of `%s` '
@@ -333,7 +367,7 @@ class HTMLReader(BaseReader):
     class _HTMLParser(HTMLParser):
         def __init__(self, settings, filename):
             try:
-                # Python 3.4+
+                # Python 3.5+
                 HTMLParser.__init__(self, convert_charrefs=False)
             except TypeError:
                 HTMLParser.__init__(self)
@@ -440,7 +474,17 @@ class HTMLReader(BaseReader):
 
             if name == 'keywords':
                 name = 'tags'
-            self.metadata[name] = contents
+
+            if name in self.metadata:
+                # if this metadata already exists (i.e. a previous tag with the
+                # same name has already been specified then either convert to
+                # list or append to list
+                if isinstance(self.metadata[name], list):
+                    self.metadata[name].append(contents)
+                else:
+                    self.metadata[name] = [self.metadata[name], contents]
+            else:
+                self.metadata[name] = contents
 
         @classmethod
         def _attr_value(cls, attrs, name, default=None):
@@ -654,8 +698,20 @@ def path_metadata(full_path, source_path, settings=None):
         if settings.get('DEFAULT_DATE', None) == 'fs':
             metadata['date'] = SafeDatetime.fromtimestamp(
                 os.stat(full_path).st_mtime)
-        metadata.update(settings.get('EXTRA_PATH_METADATA', {}).get(
-            source_path, {}))
+
+        # Apply EXTRA_PATH_METADATA for the source path and the paths of any
+        # parent directories. Sorting EPM first ensures that the most specific
+        # path wins conflicts.
+
+        epm = settings.get('EXTRA_PATH_METADATA', {})
+        for path, meta in sorted(epm.items()):
+            # Enforce a trailing slash when checking for parent directories.
+            # This prevents false positives when one file or directory's name
+            # is a prefix of another's.
+            dirpath = os.path.join(path, '')
+            if source_path == path or source_path.startswith(dirpath):
+                metadata.update(meta)
+
     return metadata
 
 

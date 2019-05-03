@@ -273,6 +273,38 @@ class RstReaderTest(ReaderTest):
         }
         self.assertDictHasSubset(page.metadata, expected)
 
+    def test_article_extra_path_metadata_recurse(self):
+        parent = "TestCategory"
+        notparent = "TestCategory/article"
+        path = "TestCategory/article_without_category.rst"
+
+        epm = {
+            parent: {'epmr_inherit': parent,
+                     'epmr_override': parent, },
+            notparent: {'epmr_bogus': notparent},
+            path:   {'epmr_override': path, },
+            }
+        expected_metadata = {
+            'epmr_inherit': parent,
+            'epmr_override': path,
+            }
+
+        page = self.read_file(path=path, EXTRA_PATH_METADATA=epm)
+        self.assertDictHasSubset(page.metadata, expected_metadata)
+
+        # Make sure vars aren't getting "inherited" by mistake...
+        path = "article.rst"
+        page = self.read_file(path=path, EXTRA_PATH_METADATA=epm)
+        for k in expected_metadata.keys():
+            self.assertNotIn(k, page.metadata)
+
+        # Same, but for edge cases where one file's name is a prefix of
+        # another.
+        path = "TestCategory/article_without_category.rst"
+        page = self.read_file(path=path, EXTRA_PATH_METADATA=epm)
+        for k in epm[notparent].keys():
+            self.assertNotIn(k, page.metadata)
+
     def test_typogrify(self):
         # if nothing is specified in the settings, the content should be
         # unmodified
@@ -409,6 +441,12 @@ class RstReaderTest(ReaderTest):
 
         self.assertEqual(tuple_date.metadata['date'],
                          string_date.metadata['date'])
+
+    def test_parse_error(self):
+        # Verify that it raises an Exception, not nothing and not SystemExit or
+        # some such
+        with six.assertRaisesRegex(self, Exception, "underline too short"):
+            self.read_file(path='../parse_error/parse_error.rst')
 
 
 @unittest.skipUnless(readers.Markdown, "markdown isn't installed")
@@ -653,6 +691,14 @@ class HTMLReaderTest(ReaderTest):
             'date': SafeDatetime(2010, 12, 2, 10, 14),
             'tags': ['foo', 'bar', 'foobar'],
             'custom_field': 'http://notmyidea.org',
+        }
+
+        self.assertDictHasSubset(page.metadata, expected)
+
+    def test_article_with_multiple_similar_metadata_tags(self):
+        page = self.read_file(path='article_with_multiple_metadata_tags.html')
+        expected = {
+            'custom_field': ['https://getpelican.com', 'https://www.eff.org'],
         }
 
         self.assertDictHasSubset(page.metadata, expected)
